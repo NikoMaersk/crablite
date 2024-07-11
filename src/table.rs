@@ -1,10 +1,11 @@
 use std::ptr;
-use crate::statement::Statement;
+use crate::pager::{Pager, PAGE_SIZE};
+use std::time::Instant;
 
 
-const ID_SIZE: usize = std::mem::size_of::<u32>();
-const USERNAME_SIZE: usize = 32;
-const EMAIL_SIZE: usize = 255;
+pub const ID_SIZE: usize = std::mem::size_of::<u32>();
+pub const USERNAME_SIZE: usize = 32;
+pub const EMAIL_SIZE: usize = 255;
 const ID_OFFSET: usize = 0;
 const USERNAME_OFFSET: usize = ID_OFFSET + ID_SIZE;
 const EMAIL_OFFSET: usize = USERNAME_OFFSET + USERNAME_SIZE;
@@ -104,7 +105,6 @@ pub enum ExecuteResult {
 }
 
 
-const PAGE_SIZE: usize = 4096;
 const TABLE_MAX_PAGES: usize = 100;
 const ROW_SIZE: usize = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
 const ROWS_PER_PAGE: usize = PAGE_SIZE / ROW_SIZE;
@@ -113,27 +113,27 @@ const TABLE_MAX_ROWS: usize = ROWS_PER_PAGE * TABLE_MAX_PAGES;
 
 pub struct Table {
     pub num_rows: usize,
-    pub pages: Vec<Option<Vec<u8>>>
+    pub pager: Pager,
 }
 
 
 impl Table {
-    pub fn new() -> Self {
-        let mut pages = Vec::with_capacity(TABLE_MAX_PAGES);
-        pages.resize(TABLE_MAX_PAGES, None);
+    pub fn db_open(filename: &str) -> Self {
+        let pager = Pager::pager_open(filename).unwrap();
+
         Table {
-            num_rows: 0,
-            pages
+            num_rows: pager.file_length as usize / ROW_SIZE,
+            pager
         }
     }
 
 
-    pub fn insert_row(&mut self, statement: &Statement) -> ExecuteResult {
+    pub fn insert_row(&mut self, row_to_insert: &Row) -> ExecuteResult {
         if self.num_rows >= TABLE_MAX_ROWS {
             return ExecuteResult::ExecuteTableFull;
         }
 
-        Row::serialize_row(&statement.row_to_insert, self.row_slot(self.num_rows));
+        Row::serialize_row_unsafe(&row_to_insert, self.row_slot(self.num_rows));
 
         self.num_rows += 1;
 
@@ -160,7 +160,7 @@ impl Table {
         let page_num = row_num / ROWS_PER_PAGE;
         let row_offset = row_num % ROWS_PER_PAGE;
 
-        if let Some(page) = self.pages.get(page_num).and_then(|page| page.as_ref()) {
+        if let Some(page) = self.pager.pages.get(page_num).and_then(|page| page.as_ref()) {
             let row_start = row_offset * ROW_SIZE;
             let row_end = row_start + ROW_SIZE;
 
@@ -172,17 +172,7 @@ impl Table {
             }
         }
 
-        // if let Some(ref page) = self.pages[page_num] {
-        //     let row_data = &page[row_offset..row_offset + ROW_SIZE];
-        //     return Some(Row::deserialize_row(row_data));
-        // }
-
         None
-    }
-
-
-    fn get_page(&mut self, page_num: usize) -> &mut Vec<u8> {
-        self.pages[page_num].get_or_insert_with(|| vec![0; PAGE_SIZE])
     }
 
 
@@ -191,7 +181,11 @@ impl Table {
         let row_offset = row_num % ROWS_PER_PAGE;
         let byte_offset = row_offset * ROW_SIZE;
 
-        let page = self.get_page(page_num);
+        let now = Instant::now();
+        let page = self.pager.get_page(page_num).unwrap();
+        let duration = now.elapsed();
+        println!("{:?}", duration.as_nanos());
+
         &mut page[byte_offset..byte_offset + ROW_SIZE]
     }
 }

@@ -1,6 +1,7 @@
 pub mod statement;
 pub mod input_buffer;
-pub mod pages;
+pub mod table;
+pub mod pager;
 
 pub use input_buffer::InputBuffer;
-pub use pages::Row;
+pub use table::Row;
