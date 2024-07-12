@@ -1,5 +1,5 @@
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
 
 const TABLE_MAX_PAGES: usize = 100;
 pub const PAGE_SIZE: usize = 4096;
@@ -36,9 +36,25 @@ impl Pager {
     }
 
 
+    pub fn pager_flush(&mut self, page_num: usize, size: usize) -> io::Result<()> {
+        if page_num >= TABLE_MAX_PAGES {
+            return Err(io::Error::new(ErrorKind::InvalidInput, "page number out of bounds"));
+        }
+
+        if let Some(page) = &self.pages[page_num] {
+            self.file.seek(SeekFrom::Start((page_num * PAGE_SIZE) as u64))?;
+            self.file.write_all(&page[..size])?;
+        } else {
+            return Err(io::Error::new(ErrorKind::Other, "Tried to flush null page"));
+        }
+
+        Ok(())
+    }
+
+
     pub fn get_page(&mut self, page_num: usize) -> io::Result<&mut [u8; PAGE_SIZE]> {
         if page_num >= TABLE_MAX_PAGES {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Page number out of bounds"));
+            return Err(io::Error::new(ErrorKind::InvalidInput, "Page number out of bounds"));
         }
 
         if self.pages[page_num].is_none() {
@@ -52,7 +68,7 @@ impl Pager {
                     self.file.seek(SeekFrom::Start((page_num * PAGE_SIZE) as u64))?;
                     let bytes_read = self.file.read(&mut page[..])?;
                     if bytes_read == 0 {
-                        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Reached end of file"));
+                        return Err(io::Error::new(ErrorKind::UnexpectedEof, "Reached end of file"));
                     }
                 }
             }

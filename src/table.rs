@@ -1,4 +1,4 @@
-use std::ptr;
+use std::{io, ptr};
 use crate::pager::{Pager, PAGE_SIZE};
 use std::time::Instant;
 
@@ -125,6 +125,28 @@ impl Table {
             num_rows: pager.file_length as usize / ROW_SIZE,
             pager
         }
+    }
+
+
+    pub fn db_close(&mut self) -> io::Result<()> {
+        let mut pager = &mut self.pager;
+        let num_full_pages = self.num_rows / ROWS_PER_PAGE;
+
+        for i in 0..num_full_pages {
+            if pager.pages[i].is_some() {
+                pager.pager_flush(i, PAGE_SIZE)?;
+            }
+        }
+
+        let num_additional_rows = self.num_rows % ROWS_PER_PAGE;
+        if num_additional_rows > 0 {
+            let page_num = num_full_pages;
+            if pager.pages[page_num].is_some() {
+                pager.pager_flush(page_num, num_additional_rows * ROW_SIZE)?;
+            }
+        }
+
+        Ok(())
     }
 
 

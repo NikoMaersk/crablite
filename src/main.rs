@@ -50,7 +50,7 @@ fn main() {
         input_buffer.read_input();
 
         if input_buffer.buffer.chars().nth(0) == Some('.') {
-            match do_meta_command(&input_buffer) {
+            match do_meta_command(&input_buffer, &mut table) {
                 MetaCommandResult::MetaCommandSuccess => continue,
                 MetaCommandResult::MetaCommandUnrecognizedCommand => {
                     println!("Unrecognized command '{}'", input_buffer.buffer);
@@ -89,8 +89,9 @@ fn main() {
 }
 
 
-fn do_meta_command(input_buffer: &InputBuffer) -> MetaCommandResult {
+fn do_meta_command(input_buffer: &InputBuffer, table: &mut Table) -> MetaCommandResult {
     if input_buffer.buffer.eq(".exit") {
+        table.db_close().expect("Error: Failed to properly close database");
         exit(0);
     } else {
         return MetaCommandResult::MetaCommandUnrecognizedCommand
