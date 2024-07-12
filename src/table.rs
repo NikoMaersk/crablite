@@ -118,13 +118,14 @@ pub struct Table {
 
 
 impl Table {
-    pub fn db_open(filename: &str) -> Self {
-        let pager = Pager::pager_open(filename).unwrap();
+    pub fn db_open(filename: &str) -> io::Result<Self> {
+        let pager = Pager::pager_open(filename)?;
 
+        Ok(
         Table {
             num_rows: pager.file_length as usize / ROW_SIZE,
             pager
-        }
+        })
     }
 
 

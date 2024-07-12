@@ -42,7 +42,15 @@ fn unsafe_implementation(statement: &Statement) {
 
 
 fn main() {
-    let mut table = Table::db_open("C:\\tmp\\crablite.db");
+    let path = std::env::args().nth(1).unwrap_or(String::from("C:\\tmp\\crablite.db"));
+    let mut table = match Table::db_open(&path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("Failed to open database: {}", e);
+            exit(1);
+        }
+    };
+
     let mut input_buffer = InputBuffer::new();
 
     loop {
@@ -153,7 +161,7 @@ fn execute_insert(statement: &Statement, table: &mut Table) -> ExecuteResult {
 }
 
 
-fn execute_select(statement: &Statement, table: &mut Table) -> ExecuteResult {
+fn execute_select(table: &mut Table) -> ExecuteResult {
     table.print_all()
 }
 
@@ -165,47 +173,3 @@ fn execute_statement(statement: &Statement, table: &mut Table) -> ExecuteResult 
         StatementType::None => ExecuteResult::ExecuteFailed
     }
 }
-
-
-// Deprecated prepare_statement
-// fn prepare_statement(input_buffer: &InputBuffer, statement: &mut Statement) -> PrepareResult {
-//     let trimmed_input = input_buffer.buffer.trim();
-//
-//     if trimmed_input.len() >= 6 && &trimmed_input[..6] == "insert" {
-//         statement.statement_type = StatementType::StatementInsert;
-//
-//         return match scan_fmt!(&input_buffer.buffer, "insert {} {} {}", u32, String, String) {
-//             Ok((id, username, email)) => {
-//                 statement.row_to_insert.id = id;
-//
-//                 let username_bytes = username.as_bytes();
-//                 if username_bytes.len() > 32 {
-//                     return PrepareResult::PrepareUnrecognizedStatement;
-//                 }
-//
-//                 statement.row_to_insert.username[..username_bytes.len()].copy_from_slice(username_bytes);
-//
-//                 let email_bytes = email.as_bytes();
-//                 if email_bytes.len() > 255 {
-//                     return PrepareResult::PrepareUnrecognizedStatement;
-//                 }
-//
-//                 statement.row_to_insert.email[..email_bytes.len()].copy_from_slice(email_bytes);
-//
-//                 PrepareResult::PrepareSuccess
-//             },
-//             Err(_) => {
-//                 PrepareResult::PrepareSyntaxError
-//             }
-//         }
-//     }
-//
-//
-//     if trimmed_input == "select" {
-//         statement.statement_type = StatementType::StatementSelect;
-//         return PrepareResult::PrepareSuccess;
-//     }
-//
-//     PrepareResult::PrepareUnrecognizedStatement
-// }
-//
