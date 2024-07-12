@@ -7,9 +7,7 @@ pub const PAGE_SIZE: usize = 4096;
 pub struct Pager {
     pub file: File,
     pub file_length: u64,
-    // pub pages: Vec<Option<Vec<u8>>>,
-    // pub pages: [Option<Vec<u8>>; TABLE_MAX_PAGES]
-    pub pages: Vec<Option<Box<[u8; PAGE_SIZE]>>>
+    pub pages: [Option<Box<[u8; PAGE_SIZE]>>; TABLE_MAX_PAGES]
 }
 
 
@@ -23,10 +21,7 @@ impl Pager {
 
         let file_length = file.metadata()?.len();
 
-        // let pages = unsafe { std::mem::zeroed() };
-
-        let mut pages = Vec::with_capacity(TABLE_MAX_PAGES);
-        pages.resize(TABLE_MAX_PAGES, None);
+        let pages = std::array::from_fn(|_| None);
 
         Ok(Pager {
             file,
@@ -63,14 +58,15 @@ impl Pager {
             let num_pages = (self.file_length / PAGE_SIZE as u64) as usize;
 
             // We might save a partial page at the end of the file
-            if self.file_length % PAGE_SIZE as u64 != 0 {
-                if page_num <= num_pages {
-                    self.file.seek(SeekFrom::Start((page_num * PAGE_SIZE) as u64))?;
-                    let bytes_read = self.file.read(&mut page[..])?;
-                    if bytes_read == 0 {
-                        return Err(io::Error::new(ErrorKind::UnexpectedEof, "Reached end of file"));
-                    }
-                }
+            let partial_page = self.file_length % PAGE_SIZE as u64 != 0;
+            if page_num < num_pages || (page_num == num_pages && partial_page) {
+                self.file.seek(SeekFrom::Start((page_num * PAGE_SIZE) as u64))?;
+                let bytes_to_read = if page_num == num_pages && partial_page {
+                    (self.file_length % PAGE_SIZE as u64) as usize
+                } else {
+                    PAGE_SIZE
+                };
+                self.file.read_exact(&mut page[..bytes_to_read])?;
             }
 
             self.pages[page_num] = Some(page);
