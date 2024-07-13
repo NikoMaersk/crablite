@@ -1,9 +1,8 @@
 use std::{io, ptr};
 use crate::pager::{Pager, PAGE_SIZE};
-use std::time::Instant;
 
 
-pub const ID_SIZE: usize = std::mem::size_of::<u32>();
+pub const ID_SIZE: usize = 4;
 pub const USERNAME_SIZE: usize = 32;
 pub const EMAIL_SIZE: usize = 255;
 const ID_OFFSET: usize = 0;
@@ -35,24 +34,45 @@ impl Row {
 
 
     pub fn serialize_row_unsafe(source: &Row, destination: &mut [u8]) {
+        assert_eq!(destination.len(), EMAIL_OFFSET + EMAIL_SIZE);
+
         unsafe {
             let source_ptr = source as *const Row as *const u8;
-            ptr::copy_nonoverlapping(source_ptr.add(ID_OFFSET), destination.as_mut_ptr().add(ID_OFFSET), ID_SIZE);
-            ptr::copy_nonoverlapping(source_ptr.add(USERNAME_OFFSET), destination.as_mut_ptr().add(USERNAME_OFFSET), USERNAME_SIZE);
-            ptr::copy_nonoverlapping(source_ptr.add(EMAIL_OFFSET), destination.as_mut_ptr().add(EMAIL_OFFSET), EMAIL_SIZE);
+            ptr::copy_nonoverlapping(
+                source_ptr.add(ID_OFFSET),
+                destination.as_mut_ptr().add(ID_OFFSET),
+                ID_SIZE);
+            ptr::copy_nonoverlapping(
+                source_ptr.add(USERNAME_OFFSET),
+                destination.as_mut_ptr().add(USERNAME_OFFSET),
+                USERNAME_SIZE);
+            ptr::copy_nonoverlapping(
+                source_ptr.add(EMAIL_OFFSET),
+                destination.as_mut_ptr().add(EMAIL_OFFSET),
+                EMAIL_SIZE);
         }
     }
 
 
     pub fn serialize_row(source: &Row, destination: &mut [u8]) {
-        let id_bytes = source.id.to_ne_bytes();
+        let id_bytes = source.id.to_le_bytes();
         destination[ID_OFFSET..ID_OFFSET + ID_SIZE].copy_from_slice(&id_bytes);
 
-        destination[USERNAME_OFFSET..USERNAME_OFFSET + USERNAME_SIZE]
-            .copy_from_slice(&source.username);
+        let username_length = source.username.len().min(USERNAME_SIZE);
+        destination[USERNAME_OFFSET..USERNAME_OFFSET + username_length]
+            .copy_from_slice(&source.username[..username_length]);
 
-        destination[EMAIL_OFFSET..EMAIL_OFFSET + EMAIL_SIZE]
-            .copy_from_slice(&source.email);
+        for i in username_length..USERNAME_SIZE {
+            destination[USERNAME_OFFSET + i] = 0;
+        }
+
+        let email_length = source.email.len().min(EMAIL_SIZE);
+        destination[EMAIL_OFFSET..EMAIL_OFFSET + email_length]
+            .copy_from_slice(&source.email[..email_length]);
+
+        for i in email_length..EMAIL_SIZE {
+            destination[EMAIL_OFFSET + i] = 0;
+        }
     }
 
 
@@ -91,8 +111,8 @@ impl Default for Row {
     fn default() -> Self {
         Row {
             id: 0,
-            username: [0; 32],
-            email: [0; 255],
+            username: [0; USERNAME_SIZE],
+            email: [0; EMAIL_SIZE],
         }
     }
 }
@@ -130,7 +150,7 @@ impl Table {
 
 
     pub fn db_close(&mut self) -> io::Result<()> {
-        let mut pager = &mut self.pager;
+        let pager = &mut self.pager;
         let num_full_pages = self.num_rows / ROWS_PER_PAGE;
 
         for i in 0..num_full_pages {
@@ -204,10 +224,7 @@ impl Table {
         let row_offset = row_num % ROWS_PER_PAGE;
         let byte_offset = row_offset * ROW_SIZE;
 
-        let now = Instant::now();
         let page = self.pager.get_page(page_num).unwrap();
-        let duration = now.elapsed();
-        println!("{:?}", duration.as_nanos());
 
         &mut page[byte_offset..byte_offset + ROW_SIZE]
     }

@@ -21,7 +21,7 @@ impl Pager {
 
         let file_length = file.metadata()?.len();
 
-        let pages = std::array::from_fn(|_| None);
+        let pages = unsafe { std::mem::zeroed() };
 
         Ok(Pager {
             file,

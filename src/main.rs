@@ -127,7 +127,7 @@ fn prepare_insert(input_buffer: &InputBuffer, statement: &mut Statement) -> Prep
             let email_bytes = email.as_bytes();
 
             if username_bytes.len() > USERNAME_SIZE || email_bytes.len() > EMAIL_SIZE {
-                return  PrepareResult::PrepareSyntaxError;
+                return  PrepareResult::PrepareStringTooLong;
             }
 
             statement.row_to_insert.id = id;
@@ -168,8 +168,8 @@ fn execute_select(table: &mut Table) -> ExecuteResult {
 
 fn execute_statement(statement: &Statement, table: &mut Table) -> ExecuteResult {
     return match statement.statement_type {
-        StatementType::StatementInsert => table.insert_row(&statement.row_to_insert),
-        StatementType::StatementSelect => table.print_all(),
+        StatementType::StatementInsert => execute_insert(statement, table),
+        StatementType::StatementSelect => execute_select(table),
         StatementType::None => ExecuteResult::ExecuteFailed
     }
 }
