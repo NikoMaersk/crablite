@@ -1,13 +1,7 @@
 use std::{io, ptr};
-use crate::pager::{Pager, PAGE_SIZE};
-
-
-pub const ID_SIZE: usize = 4;
-pub const USERNAME_SIZE: usize = 32;
-pub const EMAIL_SIZE: usize = 255;
-const ID_OFFSET: usize = 0;
-const USERNAME_OFFSET: usize = ID_OFFSET + ID_SIZE;
-const EMAIL_OFFSET: usize = USERNAME_OFFSET + USERNAME_SIZE;
+use crate::cursor::Cursor;
+use crate::pager::{Pager};
+use crate::data_consts::*;
 
 
 #[derive(Debug)]
@@ -20,15 +14,18 @@ pub struct Row {
 
 
 impl Row {
-    fn new(id: u32, username: &[u8], email: &[u8]) -> Self {
+    pub fn new(id: u32, username: &str, email: &str) -> Self {
         let mut row = Row {
             id,
             username: [0; 32],
             email: [0; 255]
         };
 
-        row.username[..username.len()].copy_from_slice(username);
-        row.email[..email.len()].copy_from_slice(email);
+        let username_bytes = username.as_bytes();
+        let email_bytes = email.as_bytes();
+
+        row.username[..username.len()].copy_from_slice(username_bytes);
+        row.email[..email.len()].copy_from_slice(email_bytes);
         row
     }
 
@@ -125,12 +122,6 @@ pub enum ExecuteResult {
 }
 
 
-const TABLE_MAX_PAGES: usize = 100;
-const ROW_SIZE: usize = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
-const ROWS_PER_PAGE: usize = PAGE_SIZE / ROW_SIZE;
-const TABLE_MAX_ROWS: usize = ROWS_PER_PAGE * TABLE_MAX_PAGES;
-
-
 pub struct Table {
     pub num_rows: usize,
     pub pager: Pager,
@@ -176,7 +167,31 @@ impl Table {
             return ExecuteResult::ExecuteTableFull;
         }
 
-        Row::serialize_row_unsafe(&row_to_insert, self.row_slot(self.num_rows));
+        let mut cursor = Cursor::table_end(self);
+
+        Row::serialize_row_unsafe(&row_to_insert, cursor.cursor_value());
+
+        self.num_rows += 1;
+
+        ExecuteResult::ExecuteSuccess
+    }
+
+
+    pub fn insert_row_str(&mut self, id: u32, username: &str, email: &str) -> ExecuteResult {
+        if self.num_rows >= TABLE_MAX_ROWS {
+            return ExecuteResult::ExecuteTableFull;
+        }
+
+        let username_bytes = username.as_bytes();
+        let email_bytes = email.as_bytes();
+
+        if username_bytes.len() > USERNAME_SIZE || email_bytes.len() > EMAIL_SIZE {
+            return ExecuteResult::ExecuteFailed;
+        }
+
+        let row = Row::new(id, username, email);
+
+        Row::serialize_row_unsafe(&row, self.row_slot(self.num_rows));
 
         self.num_rows += 1;
 
@@ -189,6 +204,20 @@ impl Table {
         for i in 0..self.num_rows {
             Row::deserialize_row_existing_ref(self.row_slot(i), &mut row);
             Row::print_row(&row);
+        }
+
+        ExecuteResult::ExecuteSuccess
+    }
+
+
+    pub fn print_all_cursor(&mut self) -> ExecuteResult {
+        let mut cursor = Cursor::table_start(self);
+        let mut row = Row::default();
+
+        while !&cursor.end_of_table {
+            Row::deserialize_row_existing_ref(cursor.cursor_value(), &mut row);
+            row.print_row();
+            cursor.cursor_advance();
         }
 
         ExecuteResult::ExecuteSuccess

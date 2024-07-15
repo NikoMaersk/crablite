@@ -1,8 +1,7 @@
 use std::fs::{File, OpenOptions};
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
+use crate::data_consts::{PAGE_SIZE, TABLE_MAX_PAGES};
 
-const TABLE_MAX_PAGES: usize = 100;
-pub const PAGE_SIZE: usize = 4096;
 
 pub struct Pager {
     pub file: File,
@@ -13,7 +12,7 @@ pub struct Pager {
 
 impl Pager {
     pub fn pager_open(filename: &str) -> io::Result<Self> {
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)

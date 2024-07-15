@@ -1,7 +1,8 @@
 use std::process::exit;
 use crablite::InputBuffer;
 use crablite::statement::{Statement, StatementType};
-use crablite::table::{Row, Table, ExecuteResult, USERNAME_SIZE, EMAIL_SIZE};
+use crablite::table::{Row, Table, ExecuteResult};
+use crablite::data_consts::{USERNAME_SIZE, EMAIL_SIZE};
 use std::time::Instant;
 
 
@@ -29,6 +30,7 @@ fn safe_implementation(statement: &Statement) {
     let duration = start.elapsed();
     println!("safe impl: {:?}", duration);
 }
+
 
 fn unsafe_implementation(statement: &Statement) {
     let mut dest: [u8; 291] = [0u8; 291];
@@ -107,6 +109,20 @@ fn do_meta_command(input_buffer: &InputBuffer, table: &mut Table) -> MetaCommand
 }
 
 
+fn prepare_statement(input_buffer: &InputBuffer, statement: &mut Statement) -> PrepareResult {
+    let trimmed_input = input_buffer.buffer.trim();
+
+    return if trimmed_input.len() > 6 && &trimmed_input[..6] == "insert" {
+        prepare_insert(input_buffer, statement)
+    } else if trimmed_input == "select" {
+        statement.statement_type = StatementType::StatementSelect;
+        PrepareResult::PrepareSuccess
+    } else {
+        PrepareResult::PrepareUnrecognizedStatement
+    }
+}
+
+
 fn prepare_insert(input_buffer: &InputBuffer, statement: &mut Statement) -> PrepareResult {
     statement.statement_type = StatementType::StatementInsert;
 
@@ -142,27 +158,13 @@ fn prepare_insert(input_buffer: &InputBuffer, statement: &mut Statement) -> Prep
 }
 
 
-fn prepare_statement(input_buffer: &InputBuffer, statement: &mut Statement) -> PrepareResult {
-    let trimmed_input = input_buffer.buffer.trim();
-
-    return if trimmed_input.len() > 6 && &trimmed_input[..6] == "insert" {
-        prepare_insert(input_buffer, statement)
-    } else if trimmed_input == "select" {
-        statement.statement_type = StatementType::StatementSelect;
-        PrepareResult::PrepareSuccess
-    } else {
-        PrepareResult::PrepareUnrecognizedStatement
-    }
-}
-
-
 fn execute_insert(statement: &Statement, table: &mut Table) -> ExecuteResult {
     table.insert_row(&statement.row_to_insert)
 }
 
 
 fn execute_select(table: &mut Table) -> ExecuteResult {
-    table.print_all()
+    table.print_all_cursor()
 }
 
 
