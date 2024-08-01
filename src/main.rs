@@ -4,7 +4,7 @@ use crablite::statement::{Statement, StatementType};
 use crablite::table::{Row, Table, ExecuteResult};
 use crablite::data_consts::{USERNAME_SIZE, EMAIL_SIZE};
 use std::time::Instant;
-
+use crablite::b_tree::LeafNode;
 
 enum MetaCommandResult {
     MetaCommandSuccess,
@@ -44,7 +44,7 @@ fn unsafe_implementation(statement: &Statement) {
 
 
 fn main() {
-    let path = std::env::args().nth(1).unwrap_or(String::from("C:\\tmp\\crablite.db"));
+    let path = std::env::args().nth(1).unwrap_or(String::from("C:\\temp\\crablite.db"));
     let mut table = match Table::db_open(&path) {
         Ok(t) => t,
         Err(e) => {
@@ -103,6 +103,10 @@ fn do_meta_command(input_buffer: &InputBuffer, table: &mut Table) -> MetaCommand
     if input_buffer.buffer.eq(".exit") {
         table.db_close().expect("Error: Failed to properly close database");
         exit(0);
+    } else if input_buffer.buffer.eq(".btree") {
+        println!("Tree:");
+        LeafNode::print_leaf_node(table.pager.get_page(0).unwrap());
+        return MetaCommandResult::MetaCommandSuccess
     } else {
         return MetaCommandResult::MetaCommandUnrecognizedCommand
     }
