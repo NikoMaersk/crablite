@@ -1,5 +1,5 @@
 use std::{io, ptr};
-use crate::b_tree::LeafNode;
+use crate::leaf_node::LeafNode;
 use crate::cursor::Cursor;
 use crate::pager::{Pager};
 use crate::data_consts::*;
@@ -120,6 +120,7 @@ pub enum ExecuteResult {
     ExecuteSuccess,
     ExecuteTableFull,
     ExecuteFailed,
+    ExecuteDuplicateKey,
 }
 
 
@@ -160,18 +161,41 @@ impl Table {
     }
 
 
-
     pub fn insert_row(&mut self, row_to_insert: &Row) -> ExecuteResult {
-        let node = match self.pager.get_page(self.root_page_num) {
+        let root_page_num = self.root_page_num;
+
+        let node = match self.pager.get_page(root_page_num) {
             Ok(page) => page,
             Err(_) => return ExecuteResult::ExecuteFailed,
         };
 
-        if *LeafNode::leaf_node_num_cells(node) as usize >= LeafNode::LEAF_NODE_MAX_CELLS {
+        let num_cells = *LeafNode::leaf_node_num_cells(node) as usize;
+        if num_cells >= LeafNode::LEAF_NODE_MAX_CELLS {
             return ExecuteResult::ExecuteTableFull;
         }
 
-        let mut cursor = Cursor::table_end(self);
+        let key_to_insert = row_to_insert.id;
+        let (cursor_page_num, cursor_cell_num) = Cursor::table_find_position(self, key_to_insert);
+
+        let node = self.pager.get_page(cursor_page_num).expect("Failed to retrieve page");
+
+        if cursor_cell_num < num_cells {
+            let key_at_index = u32::from_le_bytes(
+                LeafNode::leaf_node_key(node, cursor_cell_num)
+                    .try_into()
+                    .unwrap(),
+            );
+            if key_at_index == key_to_insert {
+                return ExecuteResult::ExecuteDuplicateKey;
+            }
+        }
+
+        let mut cursor = Cursor {
+            table: self,
+            page_num: cursor_page_num,
+            cell_num: cursor_cell_num,
+            end_of_table: false,
+        };
 
         if let Err(e) = LeafNode::leaf_node_insert(&mut cursor, row_to_insert.id, row_to_insert) {
             eprintln!("Failed to insert row: {:?}", e);
@@ -182,33 +206,25 @@ impl Table {
     }
 
 
-    // pub fn insert_row_str(&mut self, id: u32, username: &str, email: &str) -> ExecuteResult {
-    //     if self.num_rows >= TABLE_MAX_ROWS {
-    //         return ExecuteResult::ExecuteTableFull;
-    //     }
-    //
-    //     let username_bytes = username.as_bytes();
-    //     let email_bytes = email.as_bytes();
-    //
-    //     if username_bytes.len() > USERNAME_SIZE || email_bytes.len() > EMAIL_SIZE {
-    //         return ExecuteResult::ExecuteFailed;
-    //     }
-    //
-    //     let row = Row::new(id, username, email);
-    //
-    //     Row::serialize_row_unsafe(&row, self.row_slot(self.num_rows));
-    //
-    //     self.num_rows += 1;
-    //
-    //     ExecuteResult::ExecuteSuccess
-    // }
+    pub fn insert_row_str(&mut self, id: u32, username: &str, email: &str) -> ExecuteResult {
+        let username_bytes = username.as_bytes();
+        let email_bytes = email.as_bytes();
+
+        if username_bytes.len() > USERNAME_SIZE || email_bytes.len() > EMAIL_SIZE {
+            return ExecuteResult::ExecuteFailed;
+        }
+
+        let row = Row::new(id, username, email);
+
+        self.insert_row(&row)
+    }
 
 
     // pub fn print_all(&mut self) -> ExecuteResult {
     //     let mut row = Row::default();
-    //     for i in 0..self.num_rows {
+    //     for i in 0..self.pager.num_pages {
     //         Row::deserialize_row_existing_ref(self.row_slot(i), &mut row);
-    //         Row::print_row(&row);
+    //         row.print_row();
     //     }
     //
     //     ExecuteResult::ExecuteSuccess
@@ -230,7 +246,7 @@ impl Table {
 
 
     // pub fn get_row(&self, row_num: usize) -> Option<Row> {
-    //     if row_num >= self.num_rows {
+    //     if row_num >= self.pager.num_pages {
     //         return None
     //     }
     //
@@ -253,13 +269,13 @@ impl Table {
     // }
 
 
-    fn row_slot(&mut self, row_num: usize) -> &mut [u8] {
-        let page_num = row_num / ROWS_PER_PAGE;
-        let row_offset = row_num % ROWS_PER_PAGE;
-        let byte_offset = row_offset * ROW_SIZE;
-
-        let page = self.pager.get_page(page_num).unwrap();
-
-        &mut page[byte_offset..byte_offset + ROW_SIZE]
-    }
+    // fn row_slot(&mut self, row_num: usize) -> &mut [u8] {
+    //     let page_num = row_num / ROWS_PER_PAGE;
+    //     let row_offset = row_num % ROWS_PER_PAGE;
+    //     let byte_offset = row_offset * ROW_SIZE;
+    //
+    //     let page = self.pager.get_page(page_num).unwrap();
+    //
+    //     &mut page[byte_offset..byte_offset + ROW_SIZE]
+    // }
 }

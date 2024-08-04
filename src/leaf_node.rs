@@ -1,23 +1,16 @@
 use std::io;
 use std::io::ErrorKind;
+use crate::leaf_node::NodeType::NodeLeaf;
 use crate::cursor::Cursor;
 use crate::data_consts::{PAGE_SIZE, ROW_SIZE};
 use crate::Row;
 
-enum NodeType {
-    NodeInternal,
-    NodeLeaf,
+#[repr(u8)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum NodeType {
+    NodeInternal = 0,
+    NodeLeaf = 1,
 }
-
-
-/// Common Node Header Layout
-const NODE_TYPE_SIZE: usize = std::mem::size_of::<u8>();
-const NODE_TYPE_OFFSET: usize = 0;
-const IS_ROOT_SIZE: usize = std::mem::size_of::<u8>();
-const IS_ROOT_OFFSET: usize = NODE_TYPE_SIZE;
-const PARENT_POINTER_SIZE: usize = std::mem::size_of::<u32>();
-const PARENT_POINTER_OFFSET: usize = IS_ROOT_OFFSET + IS_ROOT_SIZE;
-const COMMON_NODE_HEADER_SIZE: usize = NODE_TYPE_SIZE + IS_ROOT_SIZE + PARENT_POINTER_SIZE;
 
 
 pub struct LeafNode<'a> {
@@ -25,10 +18,19 @@ pub struct LeafNode<'a> {
 }
 
 impl<'a> LeafNode<'a> {
+    /// Common Node Header Layout
+    const NODE_TYPE_SIZE: usize = std::mem::size_of::<u8>();
+    const NODE_TYPE_OFFSET: usize = 0;
+    const IS_ROOT_SIZE: usize = std::mem::size_of::<u8>();
+    const IS_ROOT_OFFSET: usize = Self::NODE_TYPE_SIZE;
+    const PARENT_POINTER_SIZE: usize = std::mem::size_of::<u32>();
+    const PARENT_POINTER_OFFSET: usize = Self::IS_ROOT_OFFSET + Self::IS_ROOT_SIZE;
+    const COMMON_NODE_HEADER_SIZE: usize = Self::NODE_TYPE_SIZE + Self::IS_ROOT_SIZE + Self::PARENT_POINTER_SIZE;
+
     /// Leaf Node Header Layout
     const LEAF_NODE_NUM_CELL_SIZE: usize = std::mem::size_of::<u32>();
-    const LEAF_NODE_NUM_CELL_OFFSET: usize = COMMON_NODE_HEADER_SIZE;
-    const LEAF_NODE_HEADER_SIZE: usize = COMMON_NODE_HEADER_SIZE + Self::LEAF_NODE_NUM_CELL_SIZE;
+    const LEAF_NODE_NUM_CELL_OFFSET: usize = Self::COMMON_NODE_HEADER_SIZE;
+    const LEAF_NODE_HEADER_SIZE: usize = Self::COMMON_NODE_HEADER_SIZE + Self::LEAF_NODE_NUM_CELL_SIZE;
 
 
     /// Leaf Node Body Layout
@@ -77,6 +79,7 @@ impl<'a> LeafNode<'a> {
 
 
     pub fn initialize_leaf_node(node: &mut [u8]) {
+        Self::set_node_type(node, NodeLeaf);
         *Self::leaf_node_num_cells(node) = 0
     }
 
@@ -93,10 +96,16 @@ impl<'a> LeafNode<'a> {
         if cursor.cell_num < num_cells as usize {
             // Make room for new cell
             for i in (cursor.cell_num..num_cells as usize).rev() {
-                let (left, right) = node.split_at_mut(Self::LEAF_NODE_HEADER_SIZE + i * Self::LEAF_NODE_CELL_SIZE);
-                let dest = &mut right[..Self::LEAF_NODE_CELL_SIZE];
-                let src = &left[left.len() - Self::LEAF_NODE_CELL_SIZE..];
-                dest.copy_from_slice(src);
+                let offset_src = Self::LEAF_NODE_HEADER_SIZE + i * Self::LEAF_NODE_CELL_SIZE;
+                let offset_dest = Self::LEAF_NODE_HEADER_SIZE + (i + 1) * Self::LEAF_NODE_CELL_SIZE;
+
+                unsafe {
+                    std::ptr::copy(
+                        node.as_ptr().add(offset_src),
+                        node.as_mut_ptr().add(offset_dest),
+                        Self::LEAF_NODE_CELL_SIZE
+                    );
+                }
             }
         }
 
@@ -116,5 +125,15 @@ impl<'a> LeafNode<'a> {
             let key_value = u32::from_le_bytes(key.try_into().expect("Incorrect key length"));
             println!("  - {} : {}", i, key_value);
         }
+    }
+
+
+    pub fn get_node_type(node: &mut [u8]) -> NodeType {
+        unsafe { std::mem::transmute(node[Self::NODE_TYPE_OFFSET])}
+    }
+
+
+    pub fn set_node_type(node: &mut [u8], node_type: NodeType) {
+        node[Self::NODE_TYPE_OFFSET] = node_type as u8;
     }
 }

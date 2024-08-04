@@ -4,7 +4,7 @@ use crablite::statement::{Statement, StatementType};
 use crablite::table::{Row, Table, ExecuteResult};
 use crablite::data_consts::{USERNAME_SIZE, EMAIL_SIZE};
 use std::time::Instant;
-use crablite::b_tree::LeafNode;
+use crablite::leaf_node::LeafNode;
 
 enum MetaCommandResult {
     MetaCommandSuccess,
@@ -93,7 +93,8 @@ fn main() {
         match execute_statement(&statement, &mut table) {
             ExecuteResult::ExecuteSuccess => println!("Executed."),
             ExecuteResult::ExecuteTableFull => println!("Error: Table full."),
-            ExecuteResult::ExecuteFailed => println!("Error: No command given"),
+            ExecuteResult::ExecuteFailed => println!("Error: No command given."),
+            ExecuteResult::ExecuteDuplicateKey => println!("Error: Duplicate key."),
         }
     }
 }
